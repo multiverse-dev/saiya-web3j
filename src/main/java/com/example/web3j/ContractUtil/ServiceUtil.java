@@ -15,6 +15,7 @@ import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.methods.request.Transaction;
 import org.web3j.protocol.core.methods.response.EthCall;
+import org.web3j.protocol.core.methods.response.EthEstimateGas;
 import org.web3j.protocol.core.methods.response.EthGetTransactionCount;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
 import org.web3j.tx.gas.DefaultGasProvider;
@@ -57,14 +58,20 @@ public class ServiceUtil {
         }
     }
 
-    public String createFunctionTx(Credentials credentials, Function function, BigInteger gasLimit) {
+    public String createFunctionTx(Credentials credentials, Function function, BigInteger gasPrice) {
 
         try {
             BigInteger nonce = getNonce(credentials.getAddress());
             String encodedFunction = FunctionEncoder.encode(function);
-
-            RawTransaction rawTransaction = RawTransaction.createTransaction(nonce, DefaultGasProvider.GAS_PRICE, gasLimit, config.getContract(), encodedFunction);
-
+            EthEstimateGas ethEstimateGas = web3j.ethEstimateGas(Transaction.createFunctionCallTransaction(credentials.getAddress(),
+                            nonce, DefaultGasProvider.GAS_PRICE, DefaultGasProvider.GAS_LIMIT, config.getContract(), encodedFunction))
+                    .send();
+            if (ethEstimateGas.hasError()) {
+                log.error("get estimate gas error", ethEstimateGas.getError());
+                return null;
+            }
+            BigInteger gasLimit  = ethEstimateGas.getAmountUsed();
+            RawTransaction rawTransaction = RawTransaction.createTransaction(nonce, gasPrice, gasLimit, config.getContract(), encodedFunction);
             EthSendTransaction response =
                     web3j.ethSendRawTransaction(Numeric.toHexString(TransactionEncoder.signMessage(rawTransaction, credentials)))
                             .sendAsync()

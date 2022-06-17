@@ -11,11 +11,12 @@ import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 
+import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.math.BigInteger;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Optional;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 @Log4j2
 @Component
@@ -34,15 +35,29 @@ public class HandleToken {
     @Autowired
     ServiceUtil serviceUtil;
 
+    private static ThreadPoolExecutor executor;
+
+    @PostConstruct
+    private void initExecutor(){
+        executor = new java.util.concurrent.ThreadPoolExecutor(
+                5,
+                10,
+                60L,
+                TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(190),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+    }
+
     public String mintToken(String to, int tokenId) {
         Function function = new Function(
                 "safeMint",
                 Arrays.asList(new Address(to), new Uint256(tokenId)),
                 Collections.emptyList());
 
-        BigInteger gasLimit = new BigInteger("400000");
+        BigInteger gasPrice = BigInteger.valueOf(10_000_000_000L);
         Credentials credentials = Credentials.create(config.getPrivKey());
-        return serviceUtil.createFunctionTx(credentials, function, gasLimit);
+        return serviceUtil.createFunctionTx(credentials, function, gasPrice);
     }
 
     public String transferToken(String fromPrivKey, String to, int tokenId) {
@@ -53,12 +68,12 @@ public class HandleToken {
                 Arrays.asList(new Address(from), new Address(to), new Uint256(tokenId)),
                 Collections.emptyList());
 
-        BigInteger gasLimit = new BigInteger("4000000");
-        return serviceUtil.createFunctionTx(credentials, function, gasLimit);
+        BigInteger gasPrice = BigInteger.valueOf(10_000_000_000L);
+        return serviceUtil.createFunctionTx(credentials, function, gasPrice);
 
     }
 
-    public Status checkIfSucceed(String txHash) throws IOException {
+    public Status getTransactionStatus(String txHash) throws IOException {
         Optional<TransactionReceipt> transactionReceipt =
                 web3j.ethGetTransactionReceipt(txHash).send().getTransactionReceipt();
         if (transactionReceipt.isPresent()) {
@@ -67,5 +82,21 @@ public class HandleToken {
             log.warn("tx not found with hash [{}]", txHash);
             return Status.UNKNOWN_TRANSACTION;
         }
+    }
+
+    public Map<String, Status> getTransactionStatus(List<String> txHashes) {
+        ConcurrentHashMap<String, Status> res = new ConcurrentHashMap<>();
+        List<CompletableFuture> futures = txHashes.stream().map(txHash -> CompletableFuture.runAsync(() -> {
+            try {
+                Optional<TransactionReceipt> receipt = web3j.ethGetTransactionReceipt(txHash).send().getTransactionReceipt();
+                Status status = receipt.isPresent() ? "0x1".equals(receipt.get().getStatus()) ? Status.SUCCEED : Status.FAILED : Status.UNKNOWN_TRANSACTION;
+                res.put(txHash, status);
+            } catch (IOException e) {
+                res.put(txHash, Status.UNKNOWN_TRANSACTION);
+            }
+        }, executor)).collect(Collectors.toList());
+
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()])).join();
+        return res;
     }
 }
