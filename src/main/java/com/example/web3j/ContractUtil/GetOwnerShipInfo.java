@@ -18,7 +18,7 @@ public class GetOwnerShipInfo {
     @Autowired
     ServiceUtil serviceUtil;
 
-    public String getOwnerOf(int tokenId) {
+    public String getOwnerOf(BigInteger tokenId) {
         Function function = new Function(
                 "ownerOf",
                 Arrays.asList(new Uint256(tokenId)),

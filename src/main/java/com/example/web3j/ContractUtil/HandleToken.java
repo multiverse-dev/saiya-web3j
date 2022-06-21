@@ -49,7 +49,7 @@ public class HandleToken {
         );
     }
 
-    public String mintToken(String to, int tokenId) {
+    public String mintToken(String to, BigInteger tokenId) {
         Function function = new Function(
                 "safeMint",
                 Arrays.asList(new Address(to), new Uint256(tokenId)),
@@ -60,7 +60,7 @@ public class HandleToken {
         return serviceUtil.createFunctionTx(credentials, function, gasPrice);
     }
 
-    public String transferToken(String fromPrivKey, String to, int tokenId) {
+    public String transferToken(String fromPrivKey, String to, BigInteger tokenId) {
         Credentials credentials = Credentials.create(fromPrivKey);
         String from = credentials.getAddress();
         Function function = new Function(
