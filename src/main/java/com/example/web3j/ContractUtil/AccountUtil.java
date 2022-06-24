@@ -5,12 +5,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.web3j.crypto.*;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.methods.response.EthGetBalance;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
+import org.web3j.tx.RawTransactionManager;
 import org.web3j.tx.Transfer;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.security.InvalidAlgorithmParameterException;
@@ -39,9 +43,12 @@ public class AccountUtil {
 
     public String transferAndGetReceipt(String toAddress, BigDecimal amount) throws Exception {
         Credentials credentials = Credentials.create(config.getPrivKey());
-        TransactionReceipt transactionReceipt = Transfer.sendFunds(
-                web3j, credentials, toAddress,
-                amount, Convert.Unit.ETHER).send();
+        BigInteger gasPrice = BigInteger.valueOf(10_000_000_000L);
+        BigInteger gasLimit = BigInteger.valueOf(100_000L);
+
+        Transfer transfer = new Transfer(web3j, new RawTransactionManager(web3j, credentials));
+        TransactionReceipt transactionReceipt = transfer.sendFunds(
+                toAddress, amount, Convert.Unit.ETHER, gasPrice, gasLimit).send();
         return transactionReceipt.getTransactionHash();
     }
 
@@ -63,5 +70,14 @@ public class AccountUtil {
         }
         String transactionHash = response.getTransactionHash();
         return transactionHash;
+    }
+
+    public BigDecimal getEtherBalance(String address) throws IOException {
+
+        EthGetBalance ethGetBalance = web3j.ethGetBalance(address, DefaultBlockParameterName.LATEST).send();
+        if (ethGetBalance != null) {
+            return Convert.fromWei(ethGetBalance.getBalance().toString(), Convert.Unit.ETHER);
+        }
+        return BigDecimal.ZERO;
     }
 }

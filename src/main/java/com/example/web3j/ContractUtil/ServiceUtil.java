@@ -4,6 +4,7 @@ import com.example.web3j.config.Config;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.FunctionReturnDecoder;
 import org.web3j.abi.datatypes.Function;
@@ -18,7 +19,6 @@ import org.web3j.protocol.core.methods.response.EthCall;
 import org.web3j.protocol.core.methods.response.EthEstimateGas;
 import org.web3j.protocol.core.methods.response.EthGetTransactionCount;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
-import org.web3j.tx.gas.DefaultGasProvider;
 import org.web3j.utils.Numeric;
 
 import java.math.BigInteger;
@@ -51,11 +51,14 @@ public class ServiceUtil {
                     .sendAsync().get();
 
             List<Type> results = FunctionReturnDecoder.decode(response.getValue(), function.getOutputParameters());
-            return results.get(0);
+            if (!CollectionUtils.isEmpty(results)) {
+                return results.get(0);
+            }
         } catch (Exception e) {
             log.error("get info error", e);
             return null;
         }
+        return null;
     }
 
     public String createFunctionTx(Credentials credentials, Function function, BigInteger gasPrice) {
@@ -63,9 +66,8 @@ public class ServiceUtil {
         try {
             BigInteger nonce = getNonce(credentials.getAddress());
             String encodedFunction = FunctionEncoder.encode(function);
-            EthEstimateGas ethEstimateGas = web3j.ethEstimateGas(Transaction.createFunctionCallTransaction(credentials.getAddress(),
-                            nonce, DefaultGasProvider.GAS_PRICE, DefaultGasProvider.GAS_LIMIT, config.getContract(), encodedFunction))
-                    .send();
+            EthEstimateGas ethEstimateGas = web3j.ethEstimateGas(Transaction.createEthCallTransaction(credentials.getAddress(), config.getContract(), encodedFunction))
+                    .sendAsync().get();
             if (ethEstimateGas.hasError()) {
                 log.error("get estimate gas error", ethEstimateGas.getError());
                 return null;
